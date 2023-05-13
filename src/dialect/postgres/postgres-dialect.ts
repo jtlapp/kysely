@@ -8,15 +8,17 @@ import { PostgresIntrospector } from './postgres-introspector.js'
 import { PostgresQueryCompiler } from './postgres-query-compiler.js'
 import { DialectAdapter } from '../dialect-adapter.js'
 import { PostgresAdapter } from './postgres-adapter.js'
-import { PostgresDialectConfig } from './postgres-dialect-config.js'
+import { PostgresDialectPoolConfig } from './postgres-dialect-pool-config.js'
+import { PostgresDialectClientConfig } from './postgres-dialect-client-config.js'
 
 /**
  * PostgreSQL dialect that uses the [pg](https://node-postgres.com/) library.
  *
- * The constructor takes an instance of {@link PostgresDialectConfig}.
+ * The constructor takes either an instance of {@link PostgresDialectPoolConfig}
+ * or an instance of {@link PostgresDialectClientConfig}.
  *
  * ```ts
- * import { Pool } from 'pg'
+ * import { Client, Pool } from 'pg'
  *
  * new PostgresDialect({
  *   pool: new Pool({
@@ -24,13 +26,20 @@ import { PostgresDialectConfig } from './postgres-dialect-config.js'
  *     host: 'localhost',
  *   })
  * })
+ *
+ * new PostgresDialect({
+ *   client: new Client({
+ *     database: 'some_db',
+ *     host: 'localhost',
+ *   })
+ * })
  * ```
  *
- * If you want the pool to only be created once it's first used, `pool`
- * can be a function:
+ * If you want the pool or client to only be created once it's first used,
+ * `pool` or `client` can be a function:
  *
  * ```ts
- * import { Pool } from 'pg'
+ * import { Client, Pool } from 'pg'
  *
  * new PostgresDialect({
  *   pool: async () => new Pool({
@@ -38,12 +47,19 @@ import { PostgresDialectConfig } from './postgres-dialect-config.js'
  *     host: 'localhost',
  *   })
  * })
+ *
+ * new PostgresDialect({
+ *   client: async () => new Client({
+ *     database: 'some_db',
+ *     host: 'localhost',
+ *   })
+ * })
  * ```
  */
 export class PostgresDialect implements Dialect {
-  readonly #config: PostgresDialectConfig
+  readonly #config: PostgresDialectPoolConfig | PostgresDialectClientConfig
 
-  constructor(config: PostgresDialectConfig) {
+  constructor(config: PostgresDialectPoolConfig | PostgresDialectClientConfig) {
     this.#config = config
   }
 

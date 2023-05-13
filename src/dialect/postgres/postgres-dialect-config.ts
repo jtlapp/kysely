@@ -9,9 +9,18 @@ export interface PostgresDialectConfig {
    *
    * If a function is provided, it's called once when the first query is executed.
    *
-   * https://node-postgres.com/api/pool
+   * https://node-postgres.com/apis/pool
    */
-  pool: PostgresPool | (() => Promise<PostgresPool>)
+  pool?: PostgresPool | (() => Promise<PostgresPool>)
+
+  /**
+   * A postgres Client instance or a function that returns one.
+   *
+   * If a function is provided, it's called once when the first query is executed.
+   *
+   * https://node-postgres.com/apis/client
+   */
+  client?: PostgresSingleClient | (() => Promise<PostgresSingleClient>)
 
   /**
    * https://github.com/brianc/node-postgres/tree/master/packages/pg-cursor
@@ -39,21 +48,31 @@ export interface PostgresDialectConfig {
  *
  * We don't use the type from `pg` here to not have a dependency to it.
  *
- * https://node-postgres.com/api/pool
+ * https://node-postgres.com/apis/pool
  */
 export interface PostgresPool {
   connect(): Promise<PostgresPoolClient>
   end(): Promise<void>
 }
 
-export interface PostgresPoolClient {
+export interface PostgresBaseClient {
   query<R>(
     sql: string,
     parameters: ReadonlyArray<unknown>
   ): Promise<PostgresQueryResult<R>>
   query<R>(cursor: PostgresCursor<R>): PostgresCursor<R>
+  // also includes end(), but not needed by pools
+}
+
+export interface PostgresPoolClient extends PostgresBaseClient {
   release(): void
 }
+
+export interface PostgresSingleClient extends PostgresBaseClient {
+  end(): Promise<void>
+}
+
+export type PostgresClient = PostgresPoolClient | PostgresSingleClient
 
 export interface PostgresCursor<T> {
   read(rowsCount: number): Promise<T[]>

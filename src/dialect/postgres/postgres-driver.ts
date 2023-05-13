@@ -7,11 +7,15 @@ import { CompiledQuery } from '../../query-compiler/compiled-query.js'
 import { isFunction, freeze } from '../../util/object-utils.js'
 import { extendStackTrace } from '../../util/stack-trace-utils.js'
 import {
+  PostgresClient,
   PostgresCursorConstructor,
   PostgresDialectConfig,
   PostgresPool,
   PostgresPoolClient,
+  PostgresSingleClient,
 } from './postgres-dialect-config.js'
+import { PostgresDialectPoolConfig } from './postgres-dialect-pool-config.js'
+import { PostgresDialectClientConfig } from './postgres-dialect-client-config.js'
 
 const PRIVATE_RELEASE_METHOD = Symbol()
 
@@ -19,18 +23,33 @@ export class PostgresDriver implements Driver {
   readonly #config: PostgresDialectConfig
   readonly #connections = new WeakMap<PostgresPoolClient, DatabaseConnection>()
   #pool?: PostgresPool
+  #singleClient?: PostgresSingleClient
+  #singleConnection?: DatabaseConnection
 
-  constructor(config: PostgresDialectConfig) {
+  constructor(config: PostgresDialectPoolConfig | PostgresDialectClientConfig) {
     this.#config = freeze({ ...config })
   }
 
   async init(): Promise<void> {
-    this.#pool = isFunction(this.#config.pool)
-      ? await this.#config.pool()
-      : this.#config.pool
+    if (isPoolConfig(this.#config)) {
+      this.#pool = isFunction(this.#config.pool)
+        ? await this.#config.pool()
+        : this.#config.pool
+    }
   }
 
   async acquireConnection(): Promise<DatabaseConnection> {
+    if (!isPoolConfig(this.#config)) {
+      this.#singleClient = isFunction(this.#config.client)
+        ? await this.#config.client()
+        : this.#config.client
+
+      this.#singleConnection = new PostgresConnection(this.#singleClient!, {
+        cursor: this.#config.cursor ?? null,
+      })
+      return this.#singleConnection
+    }
+
     const client = await this.#pool!.connect()
     let connection = this.#connections.get(client)
 
@@ -79,7 +98,9 @@ export class PostgresDriver implements Driver {
   }
 
   async destroy(): Promise<void> {
-    if (this.#pool) {
+    if (this.#singleClient) {
+      await this.#singleClient.end()
+    } else if (this.#pool) {
       const pool = this.#pool
       this.#pool = undefined
       await pool.end()
@@ -92,10 +113,10 @@ interface PostgresConnectionOptions {
 }
 
 class PostgresConnection implements DatabaseConnection {
-  #client: PostgresPoolClient
+  #client: PostgresClient
   #options: PostgresConnectionOptions
 
-  constructor(client: PostgresPoolClient, options: PostgresConnectionOptions) {
+  constructor(client: PostgresClient, options: PostgresConnectionOptions) {
     this.#client = client
     this.#options = options
   }
@@ -168,6 +189,20 @@ class PostgresConnection implements DatabaseConnection {
   }
 
   [PRIVATE_RELEASE_METHOD](): void {
-    this.#client.release()
+    if (isPoolClient(this.#client)) {
+      this.#client.release()
+    } else {
+      this.#client.end()
+    }
   }
+}
+
+function isPoolConfig(config: any): config is PostgresDialectPoolConfig {
+  return config.pool !== undefined
+}
+
+function isPoolClient(client: any): client is PostgresPoolClient {
+  // Test for `release`, not for `end`, because `end` is also present in pg's
+  // implementation of `Client`, despite leaving it out of type `ClientBase`.
+  return client.release !== undefined
 }
