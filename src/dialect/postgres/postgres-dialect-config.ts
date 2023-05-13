@@ -69,6 +69,7 @@ export interface PostgresPoolClient extends PostgresBaseClient {
 }
 
 export interface PostgresSingleClient extends PostgresBaseClient {
+  connect(): Promise<void>
   end(): Promise<void>
 }
 
