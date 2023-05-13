@@ -40,14 +40,16 @@ export class PostgresDriver implements Driver {
 
   async acquireConnection(): Promise<DatabaseConnection> {
     if (!isPoolConfig(this.#config)) {
-      this.#singleClient = isFunction(this.#config.client)
-        ? await this.#config.client()
-        : this.#config.client
+      if (this.#singleConnection === undefined) {
+        this.#singleClient = isFunction(this.#config.client)
+          ? await this.#config.client()
+          : this.#config.client
 
-      await this.#singleClient!.connect()
-      this.#singleConnection = new PostgresConnection(this.#singleClient!, {
-        cursor: this.#config.cursor ?? null,
-      })
+        await this.#singleClient!.connect()
+        this.#singleConnection = new PostgresConnection(this.#singleClient!, {
+          cursor: this.#config.cursor ?? null,
+        })
+      }
       return this.#singleConnection
     }
 
@@ -192,8 +194,6 @@ class PostgresConnection implements DatabaseConnection {
   [PRIVATE_RELEASE_METHOD](): void {
     if (isPoolClient(this.#client)) {
       this.#client.release()
-    } else {
-      this.#client.end()
     }
   }
 }
